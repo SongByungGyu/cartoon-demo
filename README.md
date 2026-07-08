@@ -1,19 +1,19 @@
 # cartoon-demo
 
-TensorFlow.js 기반 얼굴 카툰 변환 웹 데모.
+AnimeGANv2 기반 얼굴 → 애니메 캐릭터 변환 웹 데모.
 
-안드로이드 네이티브 앱의 WebView 로 로드되어, 촬영한 사진을 브라우저 안에서 카툰 스타일로 변환합니다.
+안드로이드 네이티브 앱의 WebView 로 로드되어, 촬영한 사진을 브라우저 안에서 실제로 얼굴을 애니메 스타일로 변환합니다.
 
-## 스타일
+## 모델
 
-CartoonGAN (2018 CVPR) 4가지 스타일:
-- **Hayao** — 미야자키 하야오
-- **Shinkai** — 신카이 마코토
-- **Hosoda** — 호소다 마모루
-- **Paprika** — 콘 사토시
+**AnimeGANv2 face_paint_512** — 얼굴 자체 재구성
 
-모델 소스: [mnicnc404/CartoonGan-tensorflow](https://github.com/mnicnc404/CartoonGan-tensorflow)  
-TF.js CDN: [unpkg local-tfjs-models](https://unpkg.com/local-tfjs-models@0.0.3/cartoon-GAN/)
+- 스타일 트랜스퍼 (색만 변경) 가 아니라 얼굴 구조를 애니메 캐릭터화
+- 눈이 커지고, 이목구비 단순화, 애니메 특유 톤
+
+모델 소스: [josephrocca/anime-gan-v2-web](https://github.com/josephrocca/anime-gan-v2-web)  
+런타임: [onnxruntime-web](https://www.npmjs.com/package/onnxruntime-web) (WASM 백엔드)  
+파일 크기: 8.2MB (첫 회 다운로드 후 브라우저 캐시)
 
 ## 로컬 테스트
 

@@ -1,34 +1,32 @@
 /**
- * Cartoon Demo — TensorFlow.js 기반 카툰 변환
+ * Cartoon Demo — AnimeGANv2 (ONNX Runtime Web)
  *
- * 동작:
- *   - unpkg CDN 에 배포된 CartoonGAN TF.js 모델 4종 로드
- *   - 스타일 선택 시 해당 모델로 즉시 변환
- *   - 안드로이드 WebView 에서 오는 이미지를 CartoonBridge 로 받음
- *   - 결과를 CartoonBridge.onResult 로 반환
+ * josephrocca/anime-gan-v2-web 의 face_paint_512 모델을 활용하여
+ * 실제로 얼굴을 애니메 캐릭터로 변형.
  *
- * 모델 소스: mnicnc404/CartoonGan-tensorflow (본래 TF SavedModel)
- * TF.js 변환본 CDN: https://unpkg.com/local-tfjs-models@0.0.3/cartoon-GAN/*
+ * 스타일 트랜스퍼(CartoonGAN) 와 달리 얼굴 자체가 재구성됨:
+ *   - 눈이 커지고
+ *   - 코·입이 애니메 스타일로 단순화
+ *   - 머리카락·피부톤 애니메화
+ *
+ * 스펙:
+ *   - 모델 파일: 8.2MB (josephrocca GitHub Pages CDN)
+ *   - 입력: [1, 3, 512, 512] float32, RGB planar, [-1, 1] 정규화
+ *   - 출력: 텐서 '940', 동일 형태
+ *   - 백엔드: WASM (WebGL 은 int64 미지원)
  */
 
-// 모델 URL (unpkg CDN)
-const MODEL_URLS = {
-    hayao:   "https://unpkg.com/local-tfjs-models@0.0.3/cartoon-GAN/hayao/model.json",
-    shinkai: "https://unpkg.com/local-tfjs-models@0.0.3/cartoon-GAN/shinkai/model.json",
-    hosoda:  "https://unpkg.com/local-tfjs-models@0.0.3/cartoon-GAN/hosoda/model.json",
-    paprika: "https://unpkg.com/local-tfjs-models@0.0.3/cartoon-GAN/paprika/model.json",
-};
+// ─────────────────────────────────────────────
+// 상수 · 상태
+// ─────────────────────────────────────────────
+const MODEL_URL = "https://josephrocca.github.io/anime-gan-v2-web/anime-gan-v2.onnx";
+const MODEL_SIZE = 512;
 
-// 로드된 모델 캐시 (한 번 로드하면 재사용)
-const modelCache = {};
-
-// 현재 상태
-let currentStyle = "hayao";
-let originalImageData = null;  // base64 dataUrl
+let session = null;              // ONNX InferenceSession
+let originalImageData = null;    // dataUrl
 
 // DOM
 const statusEl = document.getElementById("status");
-const stylePickerEl = document.getElementById("stylePicker");
 const originalImgEl = document.getElementById("original");
 const cartoonImgEl = document.getElementById("cartoon");
 const loadingEl = document.getElementById("loading");
@@ -40,42 +38,25 @@ const fileInputEl = document.getElementById("fileInput");
 init();
 
 async function init() {
-    setStatus("TensorFlow.js 초기화 중...");
-    await tf.ready();
-    const backend = tf.getBackend();
-    setStatus(`백엔드: ${backend}. 사용 준비 완료.`, "success");
+    setStatus("ONNX Runtime 준비 중...");
 
-    setupStylePicker();
+    // WASM 파일 로드 경로 (CDN)
+    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/";
+
     setupFileInput();
 
     // 안드로이드 WebView 안에서 실행 중인지 감지
     if (typeof CartoonBridge !== "undefined") {
         document.body.classList.add("embedded");
-        // 네이티브에 준비 완료 알림
+    }
+
+    // 모델은 첫 사용 시 로드 (초기 화면 로딩 빠르게)
+    setStatus("사진을 선택하세요.", "success");
+
+    // 네이티브에 준비 완료 알림
+    if (typeof CartoonBridge !== "undefined") {
         try { CartoonBridge.onReady(); } catch (e) { /* noop */ }
     }
-}
-
-// ─────────────────────────────────────────────
-// 스타일 선택
-// ─────────────────────────────────────────────
-function setupStylePicker() {
-    stylePickerEl.addEventListener("click", (e) => {
-        const btn = e.target.closest(".style-btn");
-        if (!btn) return;
-        const style = btn.dataset.style;
-        if (style === currentStyle) return;
-
-        // UI 업데이트
-        stylePickerEl.querySelectorAll(".style-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        currentStyle = style;
-
-        // 원본 있으면 즉시 재변환
-        if (originalImageData) {
-            cartoonize(originalImageData);
-        }
-    });
 }
 
 // ─────────────────────────────────────────────
@@ -97,18 +78,13 @@ function setupFileInput() {
 
 /**
  * File → EXIF orientation 반영된 DataUrl
- *
- * createImageBitmap({ imageOrientation: 'from-image' }) 로 브라우저가
- * EXIF orientation 자동 적용. 그 후 캔버스에 그려서 dataUrl 로 변환.
- * 모바일 카메라 사진의 옆으로 누움 문제 해결.
+ * createImageBitmap 옵션으로 브라우저가 회전 자동 적용.
  */
 async function fileToOrientedDataUrl(file) {
-    // 모던 브라우저: EXIF 자동 반영
     let bitmap;
     try {
         bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     } catch {
-        // fallback: 옵션 없이 (일부 구형 브라우저)
         bitmap = await createImageBitmap(file);
     }
 
@@ -123,7 +99,7 @@ async function fileToOrientedDataUrl(file) {
 }
 
 // ─────────────────────────────────────────────
-// 이미지 처리 진입점 (네이티브/브라우저 공통)
+// 이미지 처리 진입점
 // ─────────────────────────────────────────────
 async function processImage(dataUrl) {
     originalImageData = dataUrl;
@@ -137,32 +113,38 @@ async function processImage(dataUrl) {
 // ─────────────────────────────────────────────
 async function cartoonize(dataUrl) {
     showLoading(true);
-    setStatus(`${currentStyle} 스타일 처리 중...`);
 
     try {
-        // 1. 모델 로드 (첫 회만 다운로드, 이후 캐시)
-        const model = await loadModel(currentStyle);
+        // 1. 모델 로드 (첫 회만)
+        if (!session) {
+            setStatus("AnimeGANv2 모델 다운로드 중 (8MB)...");
+            session = await ort.InferenceSession.create(MODEL_URL, {
+                executionProviders: ["wasm"]
+            });
+        }
 
         // 2. 이미지 → 텐서
+        setStatus("전처리 중...");
         const img = await dataUrlToImageElement(dataUrl);
-        const inputTensor = preprocessImage(img);
+        const inputTensor = await preprocessImage(img);
 
         // 3. 추론
+        setStatus("AI 처리 중... (5-15초)");
         const t0 = performance.now();
-        const outputTensor = model.execute(inputTensor);
+        const feeds = { "input.1": inputTensor };
+        const results = await session.run(feeds);
         const dt = ((performance.now() - t0) / 1000).toFixed(1);
 
         // 4. 텐서 → 이미지
+        setStatus("결과 생성 중...");
+        const outputTensor = results["940"];
         const resultDataUrl = await tensorToDataUrl(outputTensor);
 
         // 5. 표시
         cartoonImgEl.src = resultDataUrl;
         setStatus(`완료 (${dt}초)`, "success");
 
-        // 6. 정리
-        tf.dispose([inputTensor, outputTensor]);
-
-        // 7. 네이티브에 결과 전달
+        // 6. 네이티브에 결과 전달
         if (typeof CartoonBridge !== "undefined") {
             try { CartoonBridge.onResult(resultDataUrl); } catch (e) { /* noop */ }
         }
@@ -175,19 +157,6 @@ async function cartoonize(dataUrl) {
     } finally {
         showLoading(false);
     }
-}
-
-// ─────────────────────────────────────────────
-// 모델 로드 (캐시)
-// ─────────────────────────────────────────────
-async function loadModel(style) {
-    if (modelCache[style]) return modelCache[style];
-
-    setStatus(`${style} 모델 다운로드 중...`);
-    const url = MODEL_URLS[style];
-    const model = await tf.loadGraphModel(url);
-    modelCache[style] = model;
-    return model;
 }
 
 // ─────────────────────────────────────────────
@@ -204,50 +173,72 @@ function dataUrlToImageElement(dataUrl) {
 
 /**
  * 전처리:
- *   - 짧은 변 기준 정사각 크롭 (얼굴 위주)
- *   - 최대 720px 리사이즈 (처리 부하 조절)
+ *   - 짧은 변 기준 중앙 정사각 크롭
+ *   - 512x512 리사이즈
+ *   - RGB planar 로 재배치 (HWC → CHW)
  *   - [0, 255] → [-1, 1] 정규화
- *   - 배치 차원 추가 [1, H, W, 3]
  */
-function preprocessImage(img) {
-    const maxDim = 720;
-    // 짧은 변으로 정사각 크롭
+async function preprocessImage(img) {
+    // 중앙 정사각 크롭 크기
     const size = Math.min(img.naturalWidth, img.naturalHeight);
-    const cropSize = Math.min(size, maxDim);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = cropSize;
-    canvas.height = cropSize;
-    const ctx = canvas.getContext("2d");
-
-    // 중앙 크롭
     const sx = (img.naturalWidth - size) / 2;
     const sy = (img.naturalHeight - size) / 2;
-    ctx.drawImage(img, sx, sy, size, size, 0, 0, cropSize, cropSize);
 
-    return tf.tidy(() => {
-        const raw = tf.browser.fromPixels(canvas);        // [H, W, 3], uint8
-        const float = raw.toFloat();
-        const normalized = float.div(127.5).sub(1);       // [-1, 1]
-        return normalized.expandDims(0);                  // [1, H, W, 3]
-    });
+    // 512x512 캔버스로 그림
+    const canvas = document.createElement("canvas");
+    canvas.width = MODEL_SIZE;
+    canvas.height = MODEL_SIZE;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, sx, sy, size, size, 0, 0, MODEL_SIZE, MODEL_SIZE);
+
+    // RGBA 픽셀 데이터 추출
+    const imageData = ctx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
+    const rgba = imageData.data;
+
+    // RGB planar (CHW) 형태로 재배치 + 정규화
+    const planeSize = MODEL_SIZE * MODEL_SIZE;
+    const chw = new Float32Array(planeSize * 3);
+
+    for (let i = 0; i < planeSize; i++) {
+        const r = rgba[i * 4 + 0];
+        const g = rgba[i * 4 + 1];
+        const b = rgba[i * 4 + 2];
+        chw[i]                  = (r / 255) * 2 - 1;  // R plane
+        chw[planeSize + i]      = (g / 255) * 2 - 1;  // G plane
+        chw[planeSize * 2 + i]  = (b / 255) * 2 - 1;  // B plane
+    }
+
+    return new ort.Tensor("float32", chw, [1, 3, MODEL_SIZE, MODEL_SIZE]);
 }
 
 /**
  * 후처리:
  *   - [-1, 1] → [0, 255]
- *   - 텐서 → PNG DataUrl
+ *   - RGB planar (CHW) → RGBA interleaved (HWC + alpha)
+ *   - 캔버스 → JPEG DataUrl
  */
 async function tensorToDataUrl(tensor) {
-    // [1, H, W, 3] → [H, W, 3]
-    const squeezed = tf.tidy(() => {
-        const t = tensor.squeeze();
-        return t.add(1).mul(127.5).clipByValue(0, 255).toInt();
-    });
+    const data = tensor.data;              // Float32Array, planar
+    const planeSize = MODEL_SIZE * MODEL_SIZE;
+    const rgba = new Uint8ClampedArray(planeSize * 4);
 
+    for (let i = 0; i < planeSize; i++) {
+        const r = data[i] * 0.5 + 0.5;
+        const g = data[planeSize + i] * 0.5 + 0.5;
+        const b = data[planeSize * 2 + i] * 0.5 + 0.5;
+
+        rgba[i * 4 + 0] = Math.max(0, Math.min(255, Math.round(r * 255)));
+        rgba[i * 4 + 1] = Math.max(0, Math.min(255, Math.round(g * 255)));
+        rgba[i * 4 + 2] = Math.max(0, Math.min(255, Math.round(b * 255)));
+        rgba[i * 4 + 3] = 255;
+    }
+
+    const imageData = new ImageData(rgba, MODEL_SIZE, MODEL_SIZE);
     const canvas = document.createElement("canvas");
-    await tf.browser.toPixels(squeezed, canvas);
-    squeezed.dispose();
+    canvas.width = MODEL_SIZE;
+    canvas.height = MODEL_SIZE;
+    const ctx = canvas.getContext("2d");
+    ctx.putImageData(imageData, 0, 0);
     return canvas.toDataURL("image/jpeg", 0.92);
 }
 
@@ -264,19 +255,8 @@ function showLoading(show) {
 }
 
 // ─────────────────────────────────────────────
-// 네이티브(안드로이드) 에서 호출하는 진입점
+// 네이티브(안드로이드) 진입점
 // ─────────────────────────────────────────────
-// window.receiveImage(dataUrl)  — Android WebView 가 evaluateJavascript 로 호출
-// dataUrl 은 이미 네이티브 쪽에서 EXIF 반영·크롭 완료된 상태라 그대로 사용
 window.receiveImage = function(dataUrl) {
     processImage(dataUrl);
-};
-
-// window.setStyle(style)  — Android 에서 스타일 강제 지정
-window.setStyle = function(style) {
-    if (!MODEL_URLS[style]) return;
-    currentStyle = style;
-    stylePickerEl.querySelectorAll(".style-btn").forEach(b => {
-        b.classList.toggle("active", b.dataset.style === style);
-    });
 };

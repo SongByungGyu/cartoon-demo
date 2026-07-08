@@ -38,36 +38,30 @@ body {
     color: #175d1c;
 }
 
-/* 스타일 선택 */
-.style-picker {
+/* 모델 안내 */
+.model-info {
     display: flex;
+    align-items: center;
     gap: 8px;
     margin-bottom: 16px;
-    overflow-x: auto;
-    padding-bottom: 4px;
-}
-
-.style-btn {
-    flex-shrink: 0;
-    padding: 10px 16px;
-    border: 1px solid #d0c8d9;
+    padding: 10px 12px;
     background: white;
-    border-radius: 20px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
+    border: 1px solid #d0c8d9;
+    border-radius: 10px;
 }
 
-.style-btn.active {
+.badge {
+    padding: 4px 10px;
     background: #6750a4;
     color: white;
-    border-color: #6750a4;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
 }
 
-.style-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+.model-desc {
+    font-size: 13px;
+    color: #4b4753;
 }
 
 /* 이미지 영역 */

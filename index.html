@@ -3,32 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Cartoon Demo</title>
+    <title>Cartoon Demo — AnimeGANv2</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <!-- 상태 표시 -->
-        <div id="status" class="status">모델 준비 중...</div>
+        <div id="status" class="status">초기화 중...</div>
 
-        <!-- 스타일 선택 -->
-        <div class="style-picker" id="stylePicker">
-            <button class="style-btn active" data-style="hayao">미야자키</button>
-            <button class="style-btn" data-style="shinkai">신카이</button>
-            <button class="style-btn" data-style="hosoda">호소다</button>
-            <button class="style-btn" data-style="paprika">파프리카</button>
+        <!-- 모델 안내 -->
+        <div class="model-info">
+            <span class="badge">AnimeGANv2</span>
+            <span class="model-desc">얼굴을 애니메 캐릭터로 변환</span>
         </div>
 
         <!-- 이미지 영역 -->
         <div class="image-area">
             <div class="image-slot">
                 <div class="label">원본</div>
-                <img id="original" alt="원본 이미지">
+                <img id="original" alt="">
             </div>
             <div class="image-slot">
                 <div class="label">카툰</div>
                 <div class="cartoon-wrap">
-                    <img id="cartoon" alt="카툰 결과">
+                    <img id="cartoon" alt="">
                     <div id="loading" class="loading hidden">
                         <div class="spinner"></div>
                         <div class="loading-text">AI 처리 중...</div>
@@ -44,8 +42,8 @@
         </div>
     </div>
 
-    <!-- TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+    <!-- ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
     <script src="cartoonize.js"></script>
 </body>
 </html>
