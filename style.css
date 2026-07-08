@@ -83,6 +83,38 @@ body {
     grid-template-columns: repeat(2, 1fr);
 }
 
+.custom-prompt-wrap {
+    margin: 8px 0 16px;
+    padding: 10px 12px;
+    background: white;
+    border: 1px solid #d0c8d9;
+    border-radius: 10px;
+}
+
+.custom-prompt-label {
+    display: block;
+    font-size: 11px;
+    color: #6b6979;
+    margin-bottom: 6px;
+}
+
+#customPrompt {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px;
+    border: 1px solid #d0c8d9;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    resize: vertical;
+    min-height: 40px;
+}
+
+#customPrompt:focus {
+    outline: none;
+    border-color: #6750a4;
+}
+
 /* 스타일 선택 */
 .style-picker {
     display: grid;

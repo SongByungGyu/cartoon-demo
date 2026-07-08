@@ -76,23 +76,27 @@ const HD_STYLES = {
     }
 };
 
-// SD 스타일 (Cloudflare SD 1.5 img2img)
+// SD 스타일 (Cloudflare SD 1.5 img2img) — 정체성 유지 강화 프롬프트 + negative
 const SD_STYLES = {
     anime: {
         label: "애니메",
-        prompt: "beautiful anime character illustration, detailed face, expressive eyes, clean line art, vibrant colors, masterpiece, best quality"
+        prompt: "anime character portrait of same person, detailed face, expressive eyes, clean line art, soft coloring, masterpiece, best quality",
+        negative: "different person, different face, elderly, ugly, blurry, low quality, deformed, extra limbs, bad anatomy, mutated, mask, weapon, distorted mouth"
     },
     webtoon: {
         label: "웹툰",
-        prompt: "korean webtoon manhwa style illustration, clean line art, soft coloring, detailed face, masterpiece"
+        prompt: "korean webtoon manhwa illustration of same person, handsome, detailed face, clean line art, soft coloring, masterpiece, best quality",
+        negative: "different person, different face, elderly, ugly, blurry, low quality, deformed, bad anatomy"
     },
     pixar: {
         label: "픽사",
-        prompt: "pixar disney 3d animated character, cute expressive face, cinematic lighting, high quality 3d render, masterpiece"
+        prompt: "3d animated cartoon character portrait of same person, cute expressive face, soft rendering, masterpiece, best quality",
+        negative: "different person, different face, scared expression, shocked, extra teeth, googly eyes, ugly, deformed, bad anatomy"
     },
     ghibli: {
         label: "지브리",
-        prompt: "studio ghibli anime style, hayao miyazaki, watercolor illustration, soft lighting, detailed face, masterpiece"
+        prompt: "watercolor illustration portrait of same person, soft warm lighting, gentle brush strokes, detailed face, masterpiece, best quality",
+        negative: "different person, different face, elderly, old man, wrinkles, mustache, gray hair, ugly, deformed"
     }
 };
 
@@ -324,6 +328,12 @@ async function cartoonizeSd(dataUrl) {
     const style = SD_STYLES[currentStyle];
     if (!style) throw new Error("알 수 없는 SD 스타일");
 
+    // 사용자가 커스텀 프롬프트 입력했으면 그것 우선
+    const customPromptEl = document.getElementById("customPrompt");
+    const customPrompt = customPromptEl?.value.trim();
+    const prompt = customPrompt || style.prompt;
+    const negative = style.negative || "";
+
     setStatus(`${style.label} 처리 중... (15-30초, SD)`);
 
     // SD 1.5 는 512x512 최적. 리사이즈 · 크롭
@@ -337,11 +347,12 @@ async function cartoonizeSd(dataUrl) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                prompt: style.prompt,
+                prompt: prompt,
+                negative_prompt: negative,
                 image_b64: base64,
-                strength: 0.6,
-                num_steps: 20,
-                guidance: 7.5
+                strength: 0.4,       // 정체성 유지 강화 (0.6 → 0.4)
+                num_steps: 25,       // 조금 더 (품질)
+                guidance: 5.5        // 프롬프트 압박 완화 (7.5 → 5.5)
             })
         });
     } catch (e) {
