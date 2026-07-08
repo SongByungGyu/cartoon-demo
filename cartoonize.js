@@ -246,7 +246,8 @@ async function fileToOrientedDataUrl(file) {
 async function processImage(dataUrl) {
     originalImageData = dataUrl;
     originalImgEl.src = dataUrl;
-    cartoonImgEl.src = "";
+    // 카툰 슬롯 완전 비움 (깨진 아이콘 방지)
+    cartoonImgEl.removeAttribute("src");
     await cartoonize(dataUrl);
 }
 
@@ -271,6 +272,7 @@ async function cartoonize(dataUrl) {
         }
     } catch (err) {
         console.error(err);
+        cartoonImgEl.removeAttribute("src");
         setStatus(`오류: ${err.message}`, "error");
         if (typeof CartoonBridge !== "undefined") {
             try { CartoonBridge.onError(err.message); } catch (e) { /* noop */ }
@@ -368,31 +370,44 @@ async function cartoonizeSd(dataUrl) {
     const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${CF_MODEL}`;
 
     const t0 = performance.now();
-    const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            prompt: style.prompt,
-            image_b64: base64,
-            strength: 0.6,      // 정체성 보존 위해 낮게 (기본 1.0)
-            num_steps: 20,
-            guidance: 7.5
-        })
-    });
-
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`CF API ${response.status}: ${errText.slice(0, 200)}`);
+    let response;
+    try {
+        response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                prompt: style.prompt,
+                image_b64: base64,
+                strength: 0.6,
+                num_steps: 20,
+                guidance: 7.5
+            })
+        });
+    } catch (e) {
+        // fetch 자체가 실패 (CORS · 네트워크)
+        throw new Error(`네트워크 오류: ${e.message}`);
     }
 
-    // 응답이 PNG 바이너리
+    const contentType = response.headers.get("content-type") || "";
+    console.log("[SD] status:", response.status, "content-type:", contentType);
+
+    // JSON 이면 에러 · 이미지면 성공
+    if (contentType.includes("application/json") || !response.ok) {
+        const errText = await response.text();
+        console.error("[SD] error body:", errText);
+        throw new Error(`CF API ${response.status}: ${errText.slice(0, 300)}`);
+    }
+
+    if (!contentType.startsWith("image/")) {
+        throw new Error(`예상 못한 응답 형식: ${contentType}`);
+    }
+
     const blob = await response.blob();
     const dt = ((performance.now() - t0) / 1000).toFixed(1);
     setStatus(`${style.label} 완료 (${dt}초 · SD)`, "success");
-
     return await blobToDataUrl(blob);
 }
 
