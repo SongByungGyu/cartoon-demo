@@ -38,30 +38,47 @@ body {
     color: #175d1c;
 }
 
-/* 모델 안내 */
-.model-info {
-    display: flex;
-    align-items: center;
+/* 스타일 선택 */
+.style-picker {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
     margin-bottom: 16px;
-    padding: 10px 12px;
-    background: white;
-    border: 1px solid #d0c8d9;
-    border-radius: 10px;
 }
 
-.badge {
-    padding: 4px 10px;
+.style-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px;
+    border: 1px solid #d0c8d9;
+    background: white;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+}
+
+.style-btn.active {
     background: #6750a4;
     color: white;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 700;
+    border-color: #6750a4;
 }
 
-.model-desc {
-    font-size: 13px;
-    color: #4b4753;
+.style-btn .style-name {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+
+.style-btn .style-desc {
+    font-size: 11px;
+    opacity: 0.75;
+}
+
+.style-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 /* 이미지 영역 */

@@ -4,16 +4,19 @@ AnimeGANv2 기반 얼굴 → 애니메 캐릭터 변환 웹 데모.
 
 안드로이드 네이티브 앱의 WebView 로 로드되어, 촬영한 사진을 브라우저 안에서 실제로 얼굴을 애니메 스타일로 변환합니다.
 
-## 모델
+## 모델 · 4스타일
 
-**AnimeGANv2 face_paint_512** — 얼굴 자체 재구성
+**bryandlee/animegan2-pytorch** 의 4가지 사전학습 모델을 자체 ONNX 변환.  
+각 8.3MB. 우리 리포에서 직접 서빙.
 
-- 스타일 트랜스퍼 (색만 변경) 가 아니라 얼굴 구조를 애니메 캐릭터화
-- 눈이 커지고, 이목구비 단순화, 애니메 특유 톤
+| 스타일 | 특징 |
+|--------|------|
+| **부드러움** (celeba_distill) | CelebA 학습. **성별·정체성 보존 우수**. 기본 |
+| **애니 v1** (face_paint_512_v1) | 클래식 애니메 |
+| **애니 v2** (face_paint_512_v2) | 강한 애니메 (여성화 편향 있음) |
+| **파프리카** (paprika) | 콘 사토시 몽환 |
 
-모델 소스: [josephrocca/anime-gan-v2-web](https://github.com/josephrocca/anime-gan-v2-web)  
-런타임: [onnxruntime-web](https://www.npmjs.com/package/onnxruntime-web) (WASM 백엔드)  
-파일 크기: 8.2MB (첫 회 다운로드 후 브라우저 캐시)
+런타임: [onnxruntime-web](https://www.npmjs.com/package/onnxruntime-web) (WASM 백엔드)
 
 ## 로컬 테스트
 

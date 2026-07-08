@@ -1,32 +1,56 @@
 /**
- * Cartoon Demo — AnimeGANv2 (ONNX Runtime Web)
+ * Cartoon Demo — AnimeGANv2 (4 Styles)
  *
- * josephrocca/anime-gan-v2-web 의 face_paint_512 모델을 활용하여
- * 실제로 얼굴을 애니메 캐릭터로 변형.
+ * bryandlee/animegan2-pytorch 의 4가지 사전학습 모델을 자체 변환한 ONNX.
+ * 우리 GitHub Pages 에서 직접 서빙.
  *
- * 스타일 트랜스퍼(CartoonGAN) 와 달리 얼굴 자체가 재구성됨:
- *   - 눈이 커지고
- *   - 코·입이 애니메 스타일로 단순화
- *   - 머리카락·피부톤 애니메화
+ * 스타일:
+ *   - celeba_distill   : CelebA 학습, 부드러운 톤. **성별·정체성 보존 우수**
+ *   - face_paint_512_v1: 클래식 애니메 스타일 (v2 이전)
+ *   - face_paint_512_v2: 강한 애니메 (여성화 편향 있음)
+ *   - paprika         : 파프리카 영화 몽환적 스타일
  *
  * 스펙:
- *   - 모델 파일: 8.2MB (josephrocca GitHub Pages CDN)
- *   - 입력: [1, 3, 512, 512] float32, RGB planar, [-1, 1] 정규화
- *   - 출력: 텐서 '940', 동일 형태
- *   - 백엔드: WASM (WebGL 은 int64 미지원)
+ *   - 입력: [1, 3, 512, 512] float32, RGB planar, [-1, 1]
+ *   - 출력: [1, 3, 512, 512] float32, RGB planar, [-1, 1]
+ *   - 텐서명: input, output
+ *   - 백엔드: WASM
  */
 
 // ─────────────────────────────────────────────
-// 상수 · 상태
+// 모델 URL · 스타일 메타
 // ─────────────────────────────────────────────
-const MODEL_URL = "https://josephrocca.github.io/anime-gan-v2-web/anime-gan-v2.onnx";
+const STYLES = {
+    celeba_distill: {
+        url: "./models/celeba_distill.onnx",
+        label: "부드러움 (성별 유지)"
+    },
+    face_paint_512_v1: {
+        url: "./models/face_paint_512_v1.onnx",
+        label: "클래식 애니메"
+    },
+    face_paint_512_v2: {
+        url: "./models/face_paint_512_v2.onnx",
+        label: "강한 애니메"
+    },
+    paprika: {
+        url: "./models/paprika.onnx",
+        label: "파프리카 몽환"
+    }
+};
+
 const MODEL_SIZE = 512;
 
-let session = null;              // ONNX InferenceSession
-let originalImageData = null;    // dataUrl
+// ─────────────────────────────────────────────
+// 상태
+// ─────────────────────────────────────────────
+const sessions = {};                       // 스타일별 로드된 세션 캐시
+let currentStyle = "celeba_distill";       // 기본: 성별 편향 완화
+let originalImageData = null;
 
 // DOM
 const statusEl = document.getElementById("status");
+const stylePickerEl = document.getElementById("stylePicker");
 const originalImgEl = document.getElementById("original");
 const cartoonImgEl = document.getElementById("cartoon");
 const loadingEl = document.getElementById("loading");
@@ -39,28 +63,44 @@ init();
 
 async function init() {
     setStatus("ONNX Runtime 준비 중...");
-
-    // WASM 파일 로드 경로 (CDN)
     ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/";
 
+    setupStylePicker();
     setupFileInput();
 
-    // 안드로이드 WebView 안에서 실행 중인지 감지
     if (typeof CartoonBridge !== "undefined") {
         document.body.classList.add("embedded");
     }
 
-    // 모델은 첫 사용 시 로드 (초기 화면 로딩 빠르게)
     setStatus("사진을 선택하세요.", "success");
 
-    // 네이티브에 준비 완료 알림
     if (typeof CartoonBridge !== "undefined") {
         try { CartoonBridge.onReady(); } catch (e) { /* noop */ }
     }
 }
 
 // ─────────────────────────────────────────────
-// 파일 선택 (브라우저 개발용)
+// 스타일 선택
+// ─────────────────────────────────────────────
+function setupStylePicker() {
+    stylePickerEl.addEventListener("click", (e) => {
+        const btn = e.target.closest(".style-btn");
+        if (!btn) return;
+        const style = btn.dataset.style;
+        if (style === currentStyle) return;
+
+        stylePickerEl.querySelectorAll(".style-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentStyle = style;
+
+        if (originalImageData) {
+            cartoonize(originalImageData);
+        }
+    });
+}
+
+// ─────────────────────────────────────────────
+// 파일 선택 (개발용)
 // ─────────────────────────────────────────────
 function setupFileInput() {
     fileInputEl.addEventListener("change", async (e) => {
@@ -76,10 +116,6 @@ function setupFileInput() {
     });
 }
 
-/**
- * File → EXIF orientation 반영된 DataUrl
- * createImageBitmap 옵션으로 브라우저가 회전 자동 적용.
- */
 async function fileToOrientedDataUrl(file) {
     let bitmap;
     try {
@@ -109,42 +145,29 @@ async function processImage(dataUrl) {
 }
 
 // ─────────────────────────────────────────────
-// 카툰화 메인 로직
+// 카툰화 메인
 // ─────────────────────────────────────────────
 async function cartoonize(dataUrl) {
     showLoading(true);
 
     try {
-        // 1. 모델 로드 (첫 회만)
-        if (!session) {
-            setStatus("AnimeGANv2 모델 다운로드 중 (8MB)...");
-            session = await ort.InferenceSession.create(MODEL_URL, {
-                executionProviders: ["wasm"]
-            });
-        }
+        const session = await loadSession(currentStyle);
 
-        // 2. 이미지 → 텐서
         setStatus("전처리 중...");
         const img = await dataUrlToImageElement(dataUrl);
-        const inputTensor = await preprocessImage(img);
+        const inputTensor = preprocessImage(img);
 
-        // 3. 추론
-        setStatus("AI 처리 중... (5-15초)");
+        setStatus(`${STYLES[currentStyle].label} 처리 중...`);
         const t0 = performance.now();
-        const feeds = { "input.1": inputTensor };
-        const results = await session.run(feeds);
+        const results = await session.run({ input: inputTensor });
         const dt = ((performance.now() - t0) / 1000).toFixed(1);
 
-        // 4. 텐서 → 이미지
         setStatus("결과 생성 중...");
-        const outputTensor = results["940"];
-        const resultDataUrl = await tensorToDataUrl(outputTensor);
+        const resultDataUrl = tensorToDataUrl(results.output);
 
-        // 5. 표시
         cartoonImgEl.src = resultDataUrl;
         setStatus(`완료 (${dt}초)`, "success");
 
-        // 6. 네이티브에 결과 전달
         if (typeof CartoonBridge !== "undefined") {
             try { CartoonBridge.onResult(resultDataUrl); } catch (e) { /* noop */ }
         }
@@ -160,7 +183,21 @@ async function cartoonize(dataUrl) {
 }
 
 // ─────────────────────────────────────────────
-// 이미지 ↔ 텐서 변환
+// 세션 로드 (스타일별 캐시)
+// ─────────────────────────────────────────────
+async function loadSession(style) {
+    if (sessions[style]) return sessions[style];
+
+    setStatus(`${STYLES[style].label} 모델 다운로드 중 (8MB)...`);
+    const session = await ort.InferenceSession.create(STYLES[style].url, {
+        executionProviders: ["wasm"]
+    });
+    sessions[style] = session;
+    return session;
+}
+
+// ─────────────────────────────────────────────
+// 이미지 ↔ 텐서
 // ─────────────────────────────────────────────
 function dataUrlToImageElement(dataUrl) {
     return new Promise((resolve, reject) => {
@@ -171,54 +208,36 @@ function dataUrlToImageElement(dataUrl) {
     });
 }
 
-/**
- * 전처리:
- *   - 짧은 변 기준 중앙 정사각 크롭
- *   - 512x512 리사이즈
- *   - RGB planar 로 재배치 (HWC → CHW)
- *   - [0, 255] → [-1, 1] 정규화
- */
-async function preprocessImage(img) {
-    // 중앙 정사각 크롭 크기
+function preprocessImage(img) {
+    // 중앙 정사각 크롭 → 512x512
     const size = Math.min(img.naturalWidth, img.naturalHeight);
     const sx = (img.naturalWidth - size) / 2;
     const sy = (img.naturalHeight - size) / 2;
 
-    // 512x512 캔버스로 그림
     const canvas = document.createElement("canvas");
     canvas.width = MODEL_SIZE;
     canvas.height = MODEL_SIZE;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, sx, sy, size, size, 0, 0, MODEL_SIZE, MODEL_SIZE);
 
-    // RGBA 픽셀 데이터 추출
     const imageData = ctx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
     const rgba = imageData.data;
 
-    // RGB planar (CHW) 형태로 재배치 + 정규화
+    // RGB planar + 정규화 [-1, 1]
     const planeSize = MODEL_SIZE * MODEL_SIZE;
     const chw = new Float32Array(planeSize * 3);
 
     for (let i = 0; i < planeSize; i++) {
-        const r = rgba[i * 4 + 0];
-        const g = rgba[i * 4 + 1];
-        const b = rgba[i * 4 + 2];
-        chw[i]                  = (r / 255) * 2 - 1;  // R plane
-        chw[planeSize + i]      = (g / 255) * 2 - 1;  // G plane
-        chw[planeSize * 2 + i]  = (b / 255) * 2 - 1;  // B plane
+        chw[i]                  = (rgba[i * 4 + 0] / 255) * 2 - 1;
+        chw[planeSize + i]      = (rgba[i * 4 + 1] / 255) * 2 - 1;
+        chw[planeSize * 2 + i]  = (rgba[i * 4 + 2] / 255) * 2 - 1;
     }
 
     return new ort.Tensor("float32", chw, [1, 3, MODEL_SIZE, MODEL_SIZE]);
 }
 
-/**
- * 후처리:
- *   - [-1, 1] → [0, 255]
- *   - RGB planar (CHW) → RGBA interleaved (HWC + alpha)
- *   - 캔버스 → JPEG DataUrl
- */
-async function tensorToDataUrl(tensor) {
-    const data = tensor.data;              // Float32Array, planar
+function tensorToDataUrl(tensor) {
+    const data = tensor.data;
     const planeSize = MODEL_SIZE * MODEL_SIZE;
     const rgba = new Uint8ClampedArray(planeSize * 4);
 
@@ -259,4 +278,12 @@ function showLoading(show) {
 // ─────────────────────────────────────────────
 window.receiveImage = function(dataUrl) {
     processImage(dataUrl);
+};
+
+window.setStyle = function(style) {
+    if (!STYLES[style]) return;
+    currentStyle = style;
+    stylePickerEl.querySelectorAll(".style-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.style === style);
+    });
 };
