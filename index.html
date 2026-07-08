@@ -3,31 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Cartoon Demo — AnimeGANv2 (4 Styles)</title>
+    <title>Cartoon Demo — FLUX Kontext + AnimeGANv2</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <!-- 상태 표시 -->
+        <!-- 상태 -->
         <div id="status" class="status">초기화 중...</div>
 
-        <!-- 스타일 선택 -->
-        <div class="style-picker" id="stylePicker">
-            <button class="style-btn active" data-style="celeba_distill">
+        <!-- HD 스타일 (FLUX Kontext) -->
+        <div class="section-title">
+            <span class="hd-badge">HD</span> FLUX Kontext (최상 품질 · 월 80장 무료)
+        </div>
+        <div class="style-picker" id="stylePickerHd">
+            <button class="style-btn active" data-mode="hd" data-style="anime">
+                <span class="style-name">애니메 캐릭터</span>
+                <span class="style-desc">일본 애니메 스타일</span>
+            </button>
+            <button class="style-btn" data-mode="hd" data-style="pixar">
+                <span class="style-name">픽사 3D</span>
+                <span class="style-desc">디즈니 픽사 3D 캐릭터</span>
+            </button>
+            <button class="style-btn" data-mode="hd" data-style="ghibli">
+                <span class="style-name">지브리</span>
+                <span class="style-desc">미야자키 하야오 수채화</span>
+            </button>
+            <button class="style-btn" data-mode="hd" data-style="disney">
+                <span class="style-name">디즈니 2D</span>
+                <span class="style-desc">디즈니 애니 클래식</span>
+            </button>
+            <button class="style-btn" data-mode="hd" data-style="webtoon">
+                <span class="style-name">웹툰</span>
+                <span class="style-desc">한국 웹툰 스타일</span>
+            </button>
+            <button class="style-btn" data-mode="hd" data-style="semirealistic">
+                <span class="style-name">실사 카툰</span>
+                <span class="style-desc">반실사 스타일 일러스트</span>
+            </button>
+        </div>
+
+        <!-- 로컬 스타일 (AnimeGANv2) -->
+        <div class="section-title">
+            <span class="local-badge">LOCAL</span> AnimeGANv2 (무제한 · 로컬 실행)
+        </div>
+        <div class="style-picker" id="stylePickerLocal">
+            <button class="style-btn" data-mode="local" data-style="celeba_distill">
                 <span class="style-name">부드러움</span>
-                <span class="style-desc">CelebA · 성별 유지 우수</span>
+                <span class="style-desc">성별 유지 좋음</span>
             </button>
-            <button class="style-btn" data-style="face_paint_512_v1">
+            <button class="style-btn" data-mode="local" data-style="face_paint_512_v1">
                 <span class="style-name">애니 v1</span>
-                <span class="style-desc">클래식 애니메</span>
+                <span class="style-desc">클래식</span>
             </button>
-            <button class="style-btn" data-style="face_paint_512_v2">
+            <button class="style-btn" data-mode="local" data-style="face_paint_512_v2">
                 <span class="style-name">애니 v2</span>
                 <span class="style-desc">강한 애니메</span>
             </button>
-            <button class="style-btn" data-style="paprika">
+            <button class="style-btn" data-mode="local" data-style="paprika">
                 <span class="style-name">파프리카</span>
-                <span class="style-desc">콘 사토시 몽환</span>
+                <span class="style-desc">몽환</span>
             </button>
         </div>
 
@@ -49,14 +83,13 @@
             </div>
         </div>
 
-        <!-- 브라우저 직접 테스트용 -->
+        <!-- 파일 선택 -->
         <div class="dev-controls" id="devControls">
             <input type="file" id="fileInput" accept="image/*">
-            <label for="fileInput" class="dev-btn">사진 선택 (개발용)</label>
+            <label for="fileInput" class="dev-btn">사진 선택</label>
         </div>
     </div>
 
-    <!-- ONNX Runtime Web -->
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
     <script src="cartoonize.js"></script>
 </body>

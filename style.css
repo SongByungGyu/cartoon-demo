@@ -38,12 +38,47 @@ body {
     color: #175d1c;
 }
 
+/* 섹션 타이틀 */
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b4753;
+    margin: 16px 0 8px;
+}
+
+.hd-badge {
+    padding: 3px 8px;
+    background: linear-gradient(135deg, #6750a4, #a78bfa);
+    color: white;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.local-badge {
+    padding: 3px 8px;
+    background: #6b6979;
+    color: white;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
 /* 스타일 선택 */
 .style-picker {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
+}
+
+#stylePickerHd {
+    grid-template-columns: repeat(3, 1fr);
 }
 
 .style-btn {
