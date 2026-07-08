@@ -85,18 +85,41 @@ function setupFileInput() {
     fileInputEl.addEventListener("change", async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        const dataUrl = await fileToDataUrl(file);
-        processImage(dataUrl);
+        try {
+            const dataUrl = await fileToOrientedDataUrl(file);
+            processImage(dataUrl);
+        } catch (err) {
+            console.error(err);
+            setStatus(`파일 처리 실패: ${err.message}`, "error");
+        }
     });
 }
 
-function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
+/**
+ * File → EXIF orientation 반영된 DataUrl
+ *
+ * createImageBitmap({ imageOrientation: 'from-image' }) 로 브라우저가
+ * EXIF orientation 자동 적용. 그 후 캔버스에 그려서 dataUrl 로 변환.
+ * 모바일 카메라 사진의 옆으로 누움 문제 해결.
+ */
+async function fileToOrientedDataUrl(file) {
+    // 모던 브라우저: EXIF 자동 반영
+    let bitmap;
+    try {
+        bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch {
+        // fallback: 옵션 없이 (일부 구형 브라우저)
+        bitmap = await createImageBitmap(file);
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+
+    return canvas.toDataURL("image/jpeg", 0.95);
 }
 
 // ─────────────────────────────────────────────
@@ -244,6 +267,7 @@ function showLoading(show) {
 // 네이티브(안드로이드) 에서 호출하는 진입점
 // ─────────────────────────────────────────────
 // window.receiveImage(dataUrl)  — Android WebView 가 evaluateJavascript 로 호출
+// dataUrl 은 이미 네이티브 쪽에서 EXIF 반영·크롭 완료된 상태라 그대로 사용
 window.receiveImage = function(dataUrl) {
     processImage(dataUrl);
 };

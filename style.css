@@ -99,6 +99,18 @@ body {
     border-radius: 12px;
 }
 
+/* src 없을 때 깨진 아이콘 숨김 */
+.image-slot img:not([src]),
+.image-slot img[src=""] {
+    color: transparent;
+}
+.image-slot img:not([src])::before,
+.image-slot img[src=""]::before,
+.image-slot img:not([src])::after,
+.image-slot img[src=""]::after {
+    display: none;
+}
+
 .cartoon-wrap {
     position: relative;
     width: 100%;
