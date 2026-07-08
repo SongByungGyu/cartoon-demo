@@ -25,22 +25,11 @@
 const HF_ENDPOINT = "https://router.huggingface.co/fal-ai/fal-ai/flux-kontext/dev";
 const HF_TOKEN_KEY = "hf_token";
 
-const CF_TOKEN_KEY = "cf_token";
-const CF_ACCOUNT_KEY = "cf_account_id";
-const CF_MODEL = "@cf/runwayml/stable-diffusion-v1-5-img2img";
+// CF Worker 프록시 URL (사용자 계정 안에서 Workers AI 호출 · 토큰 노출 없음)
+const CF_WORKER_URL = "https://cartoon-proxy.bunggu0000.workers.dev/";
 
 function getHfToken() { return localStorage.getItem(HF_TOKEN_KEY); }
 function clearHfToken() { localStorage.removeItem(HF_TOKEN_KEY); }
-function getCfCreds() {
-    return {
-        token: localStorage.getItem(CF_TOKEN_KEY),
-        accountId: localStorage.getItem(CF_ACCOUNT_KEY)
-    };
-}
-function clearCfCreds() {
-    localStorage.removeItem(CF_TOKEN_KEY);
-    localStorage.removeItem(CF_ACCOUNT_KEY);
-}
 
 async function ensureHfToken() {
     let token = getHfToken();
@@ -57,30 +46,6 @@ async function ensureHfToken() {
     }
     localStorage.setItem(HF_TOKEN_KEY, input.trim());
     return getHfToken();
-}
-
-async function ensureCfCreds() {
-    let { token, accountId } = getCfCreds();
-    if (token && accountId) return { token, accountId };
-
-    if (!accountId) {
-        const input = prompt(
-            "Cloudflare Account ID 입력 (32자 hex)\n\n" +
-            "dash.cloudflare.com → Workers & Pages 우측에서 확인."
-        );
-        if (!input) throw new Error("Account ID 필요");
-        localStorage.setItem(CF_ACCOUNT_KEY, input.trim());
-    }
-    if (!token) {
-        const input = prompt(
-            "Cloudflare API Token 입력\n\n" +
-            "dash.cloudflare.com/profile/api-tokens 에서 Workers AI 템플릿으로 생성.\n" +
-            "이 브라우저에만 저장 · 서버·리포로 안 나감."
-        );
-        if (!input) throw new Error("API Token 필요");
-        localStorage.setItem(CF_TOKEN_KEY, input.trim());
-    }
-    return getCfCreds();
 }
 
 // HD 스타일 (FLUX Kontext) — 각 스타일별 최적화된 프롬프트
@@ -359,25 +324,18 @@ async function cartoonizeSd(dataUrl) {
     const style = SD_STYLES[currentStyle];
     if (!style) throw new Error("알 수 없는 SD 스타일");
 
-    const { token, accountId } = await ensureCfCreds();
-
     setStatus(`${style.label} 처리 중... (15-30초, SD)`);
 
     // SD 1.5 는 512x512 최적. 리사이즈 · 크롭
     const inputImageDataUrl = await preprocessForSd(dataUrl, 512);
     const base64 = inputImageDataUrl.split(",")[1];
 
-    const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${CF_MODEL}`;
-
     const t0 = performance.now();
     let response;
     try {
-        response = await fetch(endpoint, {
+        response = await fetch(CF_WORKER_URL, {
             method: "POST",
-            headers: {
-                "Authorization": `Bearer ${token}`,
-                "Content-Type": "application/json"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 prompt: style.prompt,
                 image_b64: base64,
@@ -387,7 +345,6 @@ async function cartoonizeSd(dataUrl) {
             })
         });
     } catch (e) {
-        // fetch 자체가 실패 (CORS · 네트워크)
         throw new Error(`네트워크 오류: ${e.message}`);
     }
 
