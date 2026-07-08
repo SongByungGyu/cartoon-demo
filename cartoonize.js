@@ -21,42 +21,66 @@
 // 설정
 // ─────────────────────────────────────────────
 
-// HF 토큰은 사용자 브라우저 localStorage 에 저장. 리포에 안 들어감.
-// HD 모드 첫 사용 시 입력 요구. 이후 이 브라우저에서만 자동 사용.
+// HF · CF 자격증명 · 사용자 브라우저 localStorage 에만 저장. 리포에 안 들어감.
 const HF_ENDPOINT = "https://router.huggingface.co/fal-ai/fal-ai/flux-kontext/dev";
 const HF_TOKEN_KEY = "hf_token";
 
-function getHfToken() {
-    return localStorage.getItem(HF_TOKEN_KEY);
-}
+const CF_TOKEN_KEY = "cf_token";
+const CF_ACCOUNT_KEY = "cf_account_id";
+const CF_MODEL = "@cf/runwayml/stable-diffusion-v1-5-img2img";
 
-function setHfToken(token) {
-    if (token && token.startsWith("hf_")) {
-        localStorage.setItem(HF_TOKEN_KEY, token);
-        return true;
-    }
-    return false;
+function getHfToken() { return localStorage.getItem(HF_TOKEN_KEY); }
+function clearHfToken() { localStorage.removeItem(HF_TOKEN_KEY); }
+function getCfCreds() {
+    return {
+        token: localStorage.getItem(CF_TOKEN_KEY),
+        accountId: localStorage.getItem(CF_ACCOUNT_KEY)
+    };
 }
-
-function clearHfToken() {
-    localStorage.removeItem(HF_TOKEN_KEY);
+function clearCfCreds() {
+    localStorage.removeItem(CF_TOKEN_KEY);
+    localStorage.removeItem(CF_ACCOUNT_KEY);
 }
 
 async function ensureHfToken() {
     let token = getHfToken();
     if (token) return token;
 
-    // 프롬프트 UI · 사용자에게 토큰 요청
     const input = prompt(
         "HD 모드 사용을 위해 HuggingFace 토큰 입력 (hf_로 시작)\n\n" +
-        "https://huggingface.co/settings/tokens 에서 생성 가능 (Read 권한).\n" +
-        "이 브라우저 localStorage 에만 저장되며 서버·리포로 나가지 않습니다."
+        "https://huggingface.co/settings/tokens 에서 생성 (Read 권한).\n" +
+        "이 브라우저에만 저장 · 서버·리포로 안 나감."
     );
     if (!input) throw new Error("토큰 입력 필요");
-    if (!setHfToken(input.trim())) {
+    if (!input.trim().startsWith("hf_")) {
         throw new Error("잘못된 토큰 형식 (hf_ 로 시작해야 함)");
     }
+    localStorage.setItem(HF_TOKEN_KEY, input.trim());
     return getHfToken();
+}
+
+async function ensureCfCreds() {
+    let { token, accountId } = getCfCreds();
+    if (token && accountId) return { token, accountId };
+
+    if (!accountId) {
+        const input = prompt(
+            "Cloudflare Account ID 입력 (32자 hex)\n\n" +
+            "dash.cloudflare.com → Workers & Pages 우측에서 확인."
+        );
+        if (!input) throw new Error("Account ID 필요");
+        localStorage.setItem(CF_ACCOUNT_KEY, input.trim());
+    }
+    if (!token) {
+        const input = prompt(
+            "Cloudflare API Token 입력\n\n" +
+            "dash.cloudflare.com/profile/api-tokens 에서 Workers AI 템플릿으로 생성.\n" +
+            "이 브라우저에만 저장 · 서버·리포로 안 나감."
+        );
+        if (!input) throw new Error("API Token 필요");
+        localStorage.setItem(CF_TOKEN_KEY, input.trim());
+    }
+    return getCfCreds();
 }
 
 // HD 스타일 (FLUX Kontext) — 각 스타일별 최적화된 프롬프트
@@ -87,6 +111,26 @@ const HD_STYLES = {
     }
 };
 
+// SD 스타일 (Cloudflare SD 1.5 img2img)
+const SD_STYLES = {
+    anime: {
+        label: "애니메",
+        prompt: "beautiful anime character illustration, detailed face, expressive eyes, clean line art, vibrant colors, masterpiece, best quality"
+    },
+    webtoon: {
+        label: "웹툰",
+        prompt: "korean webtoon manhwa style illustration, clean line art, soft coloring, detailed face, masterpiece"
+    },
+    pixar: {
+        label: "픽사",
+        prompt: "pixar disney 3d animated character, cute expressive face, cinematic lighting, high quality 3d render, masterpiece"
+    },
+    ghibli: {
+        label: "지브리",
+        prompt: "studio ghibli anime style, hayao miyazaki, watercolor illustration, soft lighting, detailed face, masterpiece"
+    }
+};
+
 // 로컬 스타일 (AnimeGANv2)
 const LOCAL_STYLES = {
     celeba_distill:     { label: "부드러움",   url: "./models/celeba_distill.onnx" },
@@ -108,6 +152,7 @@ let originalImageData = null;
 // DOM
 const statusEl = document.getElementById("status");
 const stylePickerHdEl = document.getElementById("stylePickerHd");
+const stylePickerSdEl = document.getElementById("stylePickerSd");
 const stylePickerLocalEl = document.getElementById("stylePickerLocal");
 const originalImgEl = document.getElementById("original");
 const cartoonImgEl = document.getElementById("cartoon");
@@ -140,7 +185,7 @@ async function init() {
 // 스타일 선택 · 두 피커 통합 관리
 // ─────────────────────────────────────────────
 function setupStylePicker() {
-    [stylePickerHdEl, stylePickerLocalEl].forEach(picker => {
+    [stylePickerHdEl, stylePickerSdEl, stylePickerLocalEl].forEach(picker => {
         picker.addEventListener("click", (e) => {
             const btn = e.target.closest(".style-btn");
             if (!btn) return;
@@ -214,6 +259,8 @@ async function cartoonize(dataUrl) {
         let resultDataUrl;
         if (currentMode === "hd") {
             resultDataUrl = await cartoonizeHd(dataUrl);
+        } else if (currentMode === "sd") {
+            resultDataUrl = await cartoonizeSd(dataUrl);
         } else {
             resultDataUrl = await cartoonizeLocal(dataUrl);
         }
@@ -296,6 +343,75 @@ async function urlToDataUrl(url) {
     const res = await fetch(url);
     const blob = await res.blob();
     return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+// ─────────────────────────────────────────────
+// SD 모드: Cloudflare Workers AI (SD 1.5 img2img)
+// ─────────────────────────────────────────────
+async function cartoonizeSd(dataUrl) {
+    const style = SD_STYLES[currentStyle];
+    if (!style) throw new Error("알 수 없는 SD 스타일");
+
+    const { token, accountId } = await ensureCfCreds();
+
+    setStatus(`${style.label} 처리 중... (15-30초, SD)`);
+
+    // SD 1.5 는 512x512 최적. 리사이즈 · 크롭
+    const inputImageDataUrl = await preprocessForSd(dataUrl, 512);
+    const base64 = inputImageDataUrl.split(",")[1];
+
+    const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${CF_MODEL}`;
+
+    const t0 = performance.now();
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            prompt: style.prompt,
+            image_b64: base64,
+            strength: 0.6,      // 정체성 보존 위해 낮게 (기본 1.0)
+            num_steps: 20,
+            guidance: 7.5
+        })
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`CF API ${response.status}: ${errText.slice(0, 200)}`);
+    }
+
+    // 응답이 PNG 바이너리
+    const blob = await response.blob();
+    const dt = ((performance.now() - t0) / 1000).toFixed(1);
+    setStatus(`${style.label} 완료 (${dt}초 · SD)`, "success");
+
+    return await blobToDataUrl(blob);
+}
+
+async function preprocessForSd(dataUrl, size) {
+    const img = await dataUrlToImageElement(dataUrl);
+    // 짧은 변 기준 정사각 크롭
+    const cropSize = Math.min(img.naturalWidth, img.naturalHeight);
+    const sx = (img.naturalWidth - cropSize) / 2;
+    const sy = (img.naturalHeight - cropSize) / 2;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    canvas.getContext("2d").drawImage(img, sx, sy, cropSize, cropSize, 0, 0, size, size);
+    return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
         reader.onerror = reject;

@@ -59,6 +59,16 @@ body {
     letter-spacing: 0.5px;
 }
 
+.sd-badge {
+    padding: 3px 8px;
+    background: linear-gradient(135deg, #f97316, #fb923c);
+    color: white;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
 .local-badge {
     padding: 3px 8px;
     background: #6b6979;
@@ -67,6 +77,10 @@ body {
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.5px;
+}
+
+#stylePickerSd {
+    grid-template-columns: repeat(2, 1fr);
 }
 
 /* 스타일 선택 */
