@@ -1,0 +1,176 @@
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: #fef7ff;
+    color: #1c1b1f;
+}
+
+.container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-top: max(16px, env(safe-area-inset-top));
+}
+
+.status {
+    font-size: 13px;
+    color: #6b6979;
+    text-align: center;
+    padding: 8px 12px;
+    background: #f3edf7;
+    border-radius: 10px;
+    margin-bottom: 12px;
+}
+
+.status.error {
+    background: #ffdad4;
+    color: #93000a;
+}
+
+.status.success {
+    background: #d1f0d0;
+    color: #175d1c;
+}
+
+/* 스타일 선택 */
+.style-picker {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.style-btn {
+    flex-shrink: 0;
+    padding: 10px 16px;
+    border: 1px solid #d0c8d9;
+    background: white;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.style-btn.active {
+    background: #6750a4;
+    color: white;
+    border-color: #6750a4;
+}
+
+.style-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 이미지 영역 */
+.image-area {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.image-slot {
+    display: flex;
+    flex-direction: column;
+}
+
+.label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b6979;
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+.image-slot img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    background: #e7e0ec;
+    border-radius: 12px;
+}
+
+.cartoon-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+}
+
+.cartoon-wrap img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* 로딩 오버레이 */
+.loading {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.loading.hidden {
+    display: none;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+}
+
+.loading-text {
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 개발용 파일 선택 (안드로이드에서는 자동으로 숨김) */
+.dev-controls {
+    display: flex;
+    justify-content: center;
+    padding: 8px;
+}
+
+.dev-btn {
+    display: inline-block;
+    padding: 12px 20px;
+    background: #6750a4;
+    color: white;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+#fileInput {
+    display: none;
+}
+
+/* WebView 안에서 (네이티브 앱) 는 개발 컨트롤 숨김 */
+body.embedded .dev-controls {
+    display: none;
+}
